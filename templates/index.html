@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-Query & Multi-Location Input</title>
+  <style>
+    /* Center everything using Flexbox */
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f2f2f2;
+      font-family: Arial, sans-serif;
+    }
+    /* Container styling */
+    .container {
+      text-align: center;
+      background-color: #fff;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      max-width: 600px;
+      width: 90%;
+    }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    /* Multi-line text area styling */
+    textarea, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      background-color: #007BFF;
+      color: white;
+      font-size: 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    /* Message container styling */
+    #message {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #d9534f;
+    }
+  </style>
+  <script>
+    function submitForm() {
+      const queriesText = document.getElementById("queries").value;
+      const locationsText = document.getElementById("locations").value;
+      const userAgentValue = document.getElementById("user_agent_type").value;
+      const userAgent = userAgentValue?.toLowerCase().replace(/ /g, "_");
+      
+      // Clear previous message
+      document.getElementById("message").innerText = "";
+      
+      // Split text areas into arrays (one entry per line)
+      const queries = queriesText.split('\n').map(q => q.trim()).filter(q => q !== "");
+      const locations = locationsText.split('\n').map(l => l.trim()).filter(l => l !== "");
+      
+      if (queries.length === 0 || locations.length === 0) {
+        document.getElementById("message").innerText = "Please enter at least one query and one location.";
+        return;
+      }
+      
+      // Loop over every query-location combination
+      queries.forEach(query => {
+        locations.forEach(location => {
+          
+          const payload = { query, location, userAgent };
+          fetch("/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          })
+          .then(response => {
+            // Capture the custom header before processing the blob
+            const paidFound = response.headers.get("X-Paid-Found");
+            if (response.ok) {
+              return response.blob().then(blob => ({ blob, paidFound }));
+            } else {
+              return response.json();
+            }
+          })
+          .then(data => {
+            if (data.blob) {
+              // Display a message in the UI based on the header value
+              if (data.paidFound === "false") {
+                document.getElementById("message").innerText = "No paid results found for query: " + query + " and location: " + location;
+              } else {
+                document.getElementById("message").innerText = "CSV file ready for query: " + query + " and location: " + location;
+              }
+              // Trigger file download (CSV file)
+              const url = window.URL.createObjectURL(data.blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `oxylabs_results_${query}_${location}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+            } else {
+              document.getElementById("message").innerText = "Error: " + data.message;
+            }
+          })
+          .catch(error => {
+            document.getElementById("message").innerText = "Error: " + error;
+          });
+        });
+      });
+    }
+    
+    function reset(){
+      document.getElementById("message").innerText = "";
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h2>Enter Queries and Locations</h2>
+    <div class="input-group">
+      <label for="queries">Queries (one per line):</label><br>
+      <textarea id="queries" placeholder="Enter one query per line" onkeypress="reset()" rows="5"></textarea>
+    </div>
+    <div class="input-group">
+      <label for="locations">Locations (one per line):</label><br>
+      <textarea id="locations" placeholder="Enter one location per line" onkeydown="reset()" rows="5"></textarea>
+    </div>
+    <div class="input-group">
+      <label for="user_agent_type">Select User Agent Type:</label><br>
+      <select id="user_agent_type">
+        <option value="Desktop">Desktop</option>
+        <option value="Desktop Chrome">Desktop Chrome</option>
+        <option value="Desktop Edge">Desktop Edge</option>
+        <option value="Desktop Firefox">Desktop Firefox</option>
+        <option value="Desktop Opera">Desktop Opera</option>
+        <option value="Desktop Safari">Desktop Safari</option>
+        <option value="Mobile">Mobile</option>
+        <option value="Mobile Android">Mobile Android</option>
+        <option value="Mobile iOS">Mobile iOS</option>
+        <option value="Tablet">Tablet</option>
+        <option value="Tablet Android">Tablet Android</option>
+        <option value="Tablet iOS">Tablet iOS</option>
+      </select>
+    </div>
+    <button onclick="submitForm()">Submit</button>
+    <div id="message"></div>
+  </div>
+</body>
+</html>
