@@ -14,9 +14,7 @@ def fetch_data(location, query, user_agent):
         'user_agent_type': user_agent,
         'query': query,
         'parse': True,
-        'context': [
-            {'key': 'results_language', 'value': 'en'}
-        ]
+        'context': [{'key': 'results_language', 'value': 'en'}]
     }
 
     response = requests.post(
@@ -27,31 +25,24 @@ def fetch_data(location, query, user_agent):
 
     if response.status_code == 200:
         try:
-            data = response.json()  # Load the JSON response
-
-            # Define file path with CSV extension
-            desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+            data = response.json()
             safe_location = location.replace(",", "_").replace(" ", "_")
             file_name = f"oxylabs_results_{query}_{safe_location}.csv"
-            file_path = os.path.join(desktop_path, file_name)
+            file_path = os.path.join(os.getcwd(), file_name)
 
-            paid_found = False  # Flag to check if any paid results were found
+            paid_found = False
 
-            # Open CSV file for writing
             with open(file_path, 'w', newline='', encoding='utf-8') as csv_file:
-                # Define columns including user_agent
                 fieldnames = ["query", "location", "user_agent", "result_type", "pos", "title", "url", "__url_shown", "desc"]
                 writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
                 writer.writeheader()
 
-                # Loop over results (assuming Oxylabs structured output)
                 for result in data.get("results", []):
                     content = result.get("content", {})
                     search_results = content.get("results", {})
 
-                    # Write organic results (if any)
                     for organic in search_results.get("organic", []):
-                        row = {
+                        writer.writerow({
                             "query": query,
                             "location": location,
                             "user_agent": user_agent,
@@ -61,33 +52,30 @@ def fetch_data(location, query, user_agent):
                             "url": organic.get("url", ""),
                             "__url_shown": organic.get("url_shown", ""),
                             "desc": organic.get("desc", "")
-                        }
-                        writer.writerow(row)
+                        })
 
-                    # Write paid ads results (if any)
                     for paid in search_results.get("paid", []):
                         paid_found = True
-                        row = {
+                        writer.writerow({
                             "query": query,
                             "location": location,
                             "user_agent": user_agent,
                             "result_type": "paid",
                             "pos": paid.get("pos", ""),
                             "title": paid.get("title", ""),
-                            "url": paid.get("url", ""),
+                            "url": paid.get("url", ""),  
                             "__url_shown": paid.get("url_shown", ""),
                             "desc": paid.get("desc", "")
-                        }
-                        writer.writerow(row)
+                        })
 
-            # Return both the file path and flag indicating paid results presence
             return file_path, paid_found
 
         except Exception as e:
             print(f"Error processing response: {e}")
-            return None  # Processing error
+            return None
 
-    return None  # API call failed
+    return None
+
 
 @app.route('/')
 def index():
@@ -98,7 +86,7 @@ def submit():
     data = request.json
     location = data.get("location")
     query = data.get("query")
-    user_agent = data.get("userAgent", "desktop")  # Default to "desktop" if not provided
+    user_agent = data.get("userAgent", "desktop")
 
     if not location or not query:
         return jsonify({"success": False, "message": "Location and query are required"})
@@ -108,7 +96,6 @@ def submit():
         file_path, paid_found = result
         if file_path and os.path.exists(file_path):
             response = make_response(send_file(file_path, as_attachment=True, mimetype="text/csv"))
-            # Attach header indicating if paid results were found.
             response.headers["X-Paid-Found"] = "true" if paid_found else "false"
             return response
     return jsonify({"success": False, "message": "Failed to fetch or format data"})
